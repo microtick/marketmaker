@@ -132,15 +132,19 @@ export class DataFeedConsumer extends SystemNode {
         }
         
         // Tick message
-        if (this.tickCallback !== undefined && obj.type === "tick") {
+        if (obj.type === "tick") {
             this.latest[obj.uuid][channel].tick = obj.tick
-            this.tickCallback(this.peers[obj.uuid].name, channel, obj.tick)
+            if (this.tickCallback !== undefined) {
+                this.tickCallback(this.peers[obj.uuid].name, channel, obj.tick)
+            }
         }
         
         // Vol message
-        if (this.volCallback !== undefined && obj.type === "vol") {
+        if (obj.type === "vol") {
             this.latest[obj.uuid][channel].vol = obj.vol
-            this.volCallback(this.peers[obj.uuid].name, channel, obj.vol)
+            if (this.volCallback !== undefined) {
+                this.volCallback(this.peers[obj.uuid].name, channel, obj.vol)
+            }
         }
         
         if (this.rawCallback !== undefined) {
@@ -195,15 +199,18 @@ export class DataFeedConsumer extends SystemNode {
         this.latest = latest
         
         // Compute averages
-        Object.keys(avg).map(key => {
-            const value = avg[key].value / avg[key].count
-            this.tickCallback("average", key, value)
-        })
-        
-        // Compute vol 
-        Object.keys(vol).map(key => {
-            const value = (vol[key].hi + vol[key].lo) / 2
-            this.volCallback("midvol", key, value)
+        const allKeys = Object.assign(Object.keys(avg), Object.keys(vol))
+        allKeys.map(key => {
+            const stats = {}
+            if (avg[key] !== undefined) {
+                stats.average = avg[key].value / avg[key].count
+            }
+            if (vol[key] !== undefined) {
+                stats.vol = (vol[key].hi + vol[key].lo) / 2
+            }
+            if (this.statsCallback !== undefined) {
+                this.statsCallback(key, stats)
+            }
         })
     }
     

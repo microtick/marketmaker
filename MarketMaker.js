@@ -10,37 +10,35 @@ class MarketMaker extends DataFeedConsumer {
         super("marketmaker")
         
         this.mmClient = redis.createClient()
+        this.lasttick = {}
+        this.lastvol = {}
         this.doStats()
-    }
-    
-    tickCallback(feed, symbol, tick) {
-        if (feed === "average") {
-            this.lasttick = tick
-            this.checkQuotes(symbol)
-        }
-    }
-    
-    volCallback(feed, symbol, vol) {
-        if (feed === "midvol") {
-            this.lastvol = vol
-            this.checkQuotes(symbol)
-        }
     }
     
     addMarket(symbol) {
         this.subscribeTicker(symbol)
     }
     
+    statsCallback(symbol, stats) {
+        if (stats.average !== undefined) {
+            this.lasttick[symbol] = stats.average
+        }
+        if (stats.vol !== undefined) {
+            this.lastvol[symbol] = stats.vol
+        }
+        this.checkQuotes(symbol)
+    }
+    
     checkQuotes(symbol) {
-        if (this.lasttick !== undefined && this.lastvol !== undefined) {
+        if (this.lasttick[symbol] !== undefined && this.lastvol[symbol] !== undefined) {
             const opt = this.calculateOptions(symbol)
             console.log(JSON.stringify(opt))
             this.mmClient.publish(symbol, JSON.stringify({
                 type: "microtick",
                 action: "quote",
                 uuid: this.uuid,
-                spot: this.lastspot,
-                premium: this.lastvol
+                spot: this.lasttick[symbol],
+                premium: this.lastvol[symbol]
             }))
         }
     }
@@ -49,7 +47,7 @@ class MarketMaker extends DataFeedConsumer {
         const options = []
         for (var i=0; i<durs.length; i++) {
             const dur = durs[i]
-            const obj = this.blackscholes(this.lasttick, this.lasttick, this.lastvol, dur / 900, 0)
+            const obj = this.blackscholes(this.lasttick[symbol], this.lasttick[symbol], this.lastvol[symbol], dur / 900, 0)
             options.push((obj.call + obj.put) / 2)
         }
         return options
