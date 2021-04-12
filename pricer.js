@@ -4,10 +4,10 @@ import { DataFeedConsumer } from './DataFeed.js'
 
 const durs = [ 300, 900, 3600, 14400, 43200 ]
 
-class MarketMaker extends DataFeedConsumer {
+class OptionPricer extends DataFeedConsumer {
     
     constructor() {
-        super("marketmaker")
+        super("option-pricer")
         
         this.mmClient = redis.createClient()
         this.lasttick = {}
@@ -32,13 +32,17 @@ class MarketMaker extends DataFeedConsumer {
     checkQuotes(symbol) {
         if (this.lasttick[symbol] !== undefined && this.lastvol[symbol] !== undefined) {
             const opt = this.calculateOptions(symbol)
-            console.log(JSON.stringify(opt))
             this.mmClient.publish(symbol, JSON.stringify({
                 type: "microtick",
-                action: "quote",
                 uuid: this.uuid,
                 spot: this.lasttick[symbol],
-                premium: this.lastvol[symbol]
+                premiums: {
+                    "300": opt[0],
+                    "900": opt[1],
+                    "3600": opt[2],
+                    "14400": opt[3],
+                    "43200": opt[4]
+                }
             }))
         }
     }
@@ -103,5 +107,5 @@ class MarketMaker extends DataFeedConsumer {
     
 }
 
-const marketmaker = new MarketMaker()
-marketmaker.addMarket("ETHUSD")
+const pricer = new OptionPricer()
+pricer.addMarket("ETHUSD")

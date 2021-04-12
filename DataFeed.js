@@ -131,7 +131,6 @@ export class DataFeedConsumer extends SystemNode {
             this.latest[obj.uuid][channel] = {}
         }
         
-        // Tick message
         if (obj.type === "tick") {
             this.latest[obj.uuid][channel].tick = obj.tick
             if (this.tickCallback !== undefined) {
@@ -147,8 +146,13 @@ export class DataFeedConsumer extends SystemNode {
             }
         }
         
+        // Microtick message
+        if (obj.type === "microtick" && this.microtickCallback !== undefined) {
+            this.microtickCallback(channel, obj.spot, obj.premiums)
+        }
+        
         if (this.rawCallback !== undefined) {
-            this.rawCallback(message)
+            this.rawCallback(obj)
         }
     }
     

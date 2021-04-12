@@ -2,7 +2,9 @@
   "type": "module",
   "dependencies": {
     "axios": "^0.21.1",
+    "prompt": "^1.1.0",
     "redis": "^3.0.2",
+    "sjcl": "^1.0.8",
     "uuid": "^8.3.2"
   }
 }

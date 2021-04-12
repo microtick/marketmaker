@@ -7,7 +7,7 @@ class Monitor extends DataFeedConsumer {
     }
     
     rawCallback(message) {
-        console.log(message)
+        console.log(JSON.stringify(message))
     }
     
 }
