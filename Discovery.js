@@ -4,12 +4,15 @@ import { v4 as uuidv4 } from 'uuid'
 const DISCOVERY = "microtick-discovery"
 const ANNOUNCE_INTERVAL = 10000
 
+const DEFAULT_LOGGING = true
+
 export default class SystemNode {
     
     constructor(name, type, discovery_cb) {
         this.uuid = uuidv4()
         this.start = Date.now()
         this.peers = {}
+        this.logging = DEFAULT_LOGGING
         
         // Discovery subscriber
         this.subClient = redis.createClient()
@@ -18,13 +21,11 @@ export default class SystemNode {
             if (chan === DISCOVERY) {
                 const obj = JSON.parse(msg)
                 if (obj.uuid !== this.uuid) {
-                    //console.log(chan + ": " + msg)
                     if (discovery_cb !== undefined) discovery_cb(obj)
                 }
             } else {
                 // Uptime monitoring
                 if (chan !== this.uuid) {
-                    //console.log("Uptime ping: " + chan + ": " + msg)
                     clearTimeout(this.peers[chan].timeout)
                     this.peers[chan].timeout = setTimeout(
                         this.peerTimeout.bind(this, chan),
@@ -50,13 +51,17 @@ export default class SystemNode {
     }
     
     reannounce() {
-        console.log("reannouncing: " + this.intro)
+        if (this.logging) {
+            console.log("reannouncing: " + this.intro)
+        }
         this.pubClient.publish(DISCOVERY, this.intro)
     }
     
     trackPeer(intro) {
         if (this.peers[intro.uuid] === undefined) {
-            console.log("Adding peer: " + intro.name + " " + intro.uuid)
+            if (this.logging) {
+                console.log("Adding peer: " + intro.name + " " + intro.uuid)
+            }
             this.subClient.subscribe(intro.uuid)
             this.peers[intro.uuid] = {
                 name: intro.name,
@@ -66,15 +71,15 @@ export default class SystemNode {
                     ANNOUNCE_INTERVAL * 1.5
                 )
             }
-            //console.log("Peers: " + Object.keys(this.peers))
         }
     }
     
     peerTimeout(uuid) {
         this.subClient.unsubscribe(uuid)
         delete this.peers[uuid]
-        console.log("Peer disconnected: " + uuid)
-        //console.log("Peers: " + Object.keys(this.peers))
+        if (this.logging) {
+            console.log("Peer disconnected: " + uuid)
+        }
     }
     
 }
