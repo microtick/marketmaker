@@ -13,21 +13,28 @@ const config = JSON.parse(fs.readFileSync(configFile))
 const api = "localhost:1320"
 
 const lookup = {
-    "300": "5minute",
-    "900": "15minute",
-    "3600": "1hour",
-    "14400": "4hour",
-    "43200": "12hour"
+    300: "5minute",
+    900: "15minute",
+    3600: "1hour",
+    14400: "4hour",
+    43200: "12hour"
 }
 
 const reverseLookup = {
-    "5minute": "300",
-    "15minute": "900",
-    "1hour": "3600",
-    "4hour": "14400",
-    "12hour": "43200"
+    "5minute": 300,
+    "15minute": 900,
+    "1hour": 3600,
+    "4hour": 14400,
+    "12hour": 43200
     
 }
+
+process.on('unhandledRejection', error => {
+  if (error !== undefined) {
+    console.log('unhandled promise rejection: ', error.message)
+    console.log(error.stack[0])
+  }
+})
 
 class MarketMaker extends DataFeedConsumer {
     
@@ -102,52 +109,110 @@ class MarketMaker extends DataFeedConsumer {
     async chainBlockHandler(block) {
         const info = await this.api.getAccountInfo(config.account.acct)
         this.state.funded = info.balance >= config.minBalance
-        this.state.backing = {}
-        this.state.quotes = await Promise.all(info.activeQuotes.map(async id => {
+        this.state.funds = info.balance
+        const backing = {}
+        const quotes = []
+        for (var i=0; i<info.activeQuotes.length; i++) {
+            const id = info.activeQuotes[i]
+            
             const quote = await this.api.getLiveQuote(id)
             const dur = reverseLookup[quote.duration]
-            if (this.state.backing[dur] === undefined) {
-                this.state.backing[dur] = quote.backing
+            quote.stale = (Date.now() - quote.modified) / 1000 > dur * config.stalePercent
+            quote.frozen = (Date.now() - quote.canModify) < 0
+            quotes.push(quote)
+            
+            let currentBacking = 0
+            if (backing[dur] === undefined) {
+                backing[dur] = quote.backing
             } else {
-                this.state.backing[dur] += quote.backing
+                currentBacking = backing[dur]
+                backing[dur] += quote.backing
+                if (backing[dur] > config.backing[dur]) {
+                    // Cancel quote
+                    console.log("Canceling quote (backing)")
+                    backing[dur] -= quote.backing
+                    this.api.cancelQuote(quote.id)
+                }
             }
-            return quote
-        }))
-        console.log(JSON.stringify(this.state, null, 2))
+            
+            if (!quote.frozen) {
+                
+                if (this.state.consensus !== undefined && this.state.targetSpot !== undefined && this.state.targetPremiums !== undefined) {
+                        
+                    const midSpot = (this.state.targetSpot + this.state.consensus) / 2
+                    const dynamicRatio = 1 + currentBacking / config.backing[dur]
+                    const markupPremium = this.state.targetPremiums[dur] * config.staticMarkup * dynamicRatio * config.dynamicMarkup
+                    const deltaAdjustment = Math.abs(this.state.targetSpot - this.state.consensus) / 2
+                    const quotePremium = markupPremium + deltaAdjustment
+                    
+                    // Update if stale
+                    if (quote.stale) {
+                        const newSpot = new BN(midSpot).toFixed(6) + "spot"
+                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                        console.log("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
+                            "[" + new BN(this.state.targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + new BN(dynamicRatio).toFixed(2) + " * " + 
+                            config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
+                        this.api.updateQuote(quote.id, newSpot, newPremium)
+                    }
+                    
+                    // Update if premium in either direction drops below target
+                    const thresholdPremium = this.state.targetPremiums[dur] * config.premiumThreshold
+                    if (Math.min(quote.premiumAsCall, quote.premiumAsPut) < thresholdPremium) {
+                        const newSpot = new BN(midSpot).toFixed(6) + "spot"
+                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                        console.log("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
+                            "[" + new BN(this.state.targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + new BN(dynamicRatio).toFixed(2) + " * " + 
+                            config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
+                        this.api.updateQuote(quote.id, newSpot, newPremium)
+                    }
+                }
+            }
+        }
+        
+        this.state.quotes = quotes
+        this.state.backing = backing
+        //console.log(JSON.stringify(this.state, null, 2))
     }
     
     chainTickHandler(symbol, payload) {
-        console.log(symbol + ": " + JSON.stringify(payload))
+        //console.log(symbol + ": " + JSON.stringify(payload))
         this.state.consensus = payload.consensus
     }
     
     microtickCallback(symbol, spot, premiums) {
-        console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
+        //console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
+        this.state.targetSpot = spot
+        this.state.targetPremiums = premiums
         if (this.state.funded) {
             if (this.state.consensus !== undefined) {
                 const midSpot = (spot + this.state.consensus) / 2
-                Object.keys(premiums).map(dur => {
+                Object.keys(this.state.targetPremiums).map(dur => {
                     let currentBacking = 0
-                    if (this.state.backing !== undefined) {
+                    if (this.state.backing !== undefined && this.state.backing[dur] !== undefined) {
                         currentBacking = this.state.backing[dur]
                     }
                     if (config.backing[dur] > currentBacking) {
-                        console.log("Goal premium: " + premiums[dur])
-                        const markupPremium = premiums[dur] * config.premiumMarkup
-                        console.log("Markup premium: " + markupPremium)
-                        const quotePremium = markupPremium + Math.abs(spot - this.state.consensus) / 2
+                        const dynamicRatio = 1 + currentBacking / config.backing[dur]
+                        const markupPremium = this.state.targetPremiums[dur] * config.staticMarkup * dynamicRatio * config.dynamicMarkup
+                        const deltaAdjustment = Math.abs(spot - this.state.consensus) / 2
+                        const quotePremium = markupPremium + deltaAdjustment
                         
-                        console.log("Placing quote: " + midSpot + " " + quotePremium)
                         const tmpDuration = lookup[dur]
                         const tmpBacking = new BN(config.backing[dur]).minus(currentBacking).toFixed(6) + "dai"
                         const tmpSpot = new BN(midSpot).toFixed(6) + "spot"
                         const tmpPremium = new BN(quotePremium).toFixed(6) + "premium"
+                        
+                        console.log("Creating quote: " + symbol + " " + tmpDuration + " " + tmpBacking + " " + tmpSpot + " " + 
+                            "[" + new BN(this.state.targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + new BN(dynamicRatio).toFixed(2) + " * " + 
+                            config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + tmpPremium + "]")
                         this.api.createQuote(symbol, tmpDuration, tmpBacking, tmpSpot, tmpPremium)
                     }
                 })  
             }
         } else {
-            console.log("Out of funds: " + config.account.acct)
+            if (this.state.funds !== undefined) {
+                console.log("Out of funds: " + config.account.acct + ": " + this.state.funds)
+            }
         }
     }
     

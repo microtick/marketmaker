@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { DataFeedProducer } from './DataFeed.js'
 
-const coincap = "http://api.coincap.io/v2"
+const coincap = "https://api.coincap.io/v2"
 const symbols = {
     XBTUSD: "bitcoin",
     ETHUSD: "ethereum"
