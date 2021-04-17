@@ -177,10 +177,11 @@ class MarketMaker extends DataFeedConsumer {
             const quote = await this.api.getLiveQuote(id)
             const dur = reverseLookup[quote.duration]
             quote.stale = (Date.now() - quote.modified) / 1000 > dur * config.stalePercent
-            quote.frozen = (Date.now() - quote.canModify) < 10000 // at least one block
+            quote.frozen = (Date.now() - quote.canModify)
             quotes.push(quote)
             
             let currentBacking = 0
+            let pending = false
             if (quoteBacking[dur] === undefined) {
                 quoteBacking[dur] = quote.backing
             } else {
@@ -190,7 +191,10 @@ class MarketMaker extends DataFeedConsumer {
                     // Cancel quote
                     logger.info("Canceling quote " + id + " (backing): " + quote.market + " " + quote.duration + " " + quote.backing + "dai")
                     quoteBacking[dur] -= quote.backing
-                    this.api.cancelQuote(quote.id)
+                    if (!pending) {
+                        this.api.cancelQuote(quote.id)
+                        pending = true
+                    }
                 }
             }
             
@@ -222,7 +226,10 @@ class MarketMaker extends DataFeedConsumer {
                         logger.info("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
                             "[" + new BN(this.state.targetPremiums[dur]).toFixed(6) + " * " + new BN(tradeRatio).toFixed(2) + " * " + config.staticMarkup + " * " + 
                             new BN(dynamicRatio).toFixed(2) + " * " +  config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
-                        this.api.updateQuote(quote.id, newSpot, newPremium)
+                        if (!pending) {
+                            this.api.updateQuote(quote.id, newSpot, newPremium)
+                            pending = true
+                        }
                     }
                     
                     // Update if premium in either direction drops below target
@@ -233,7 +240,10 @@ class MarketMaker extends DataFeedConsumer {
                         logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
                             "[" + new BN(this.state.targetPremiums[dur]).toFixed(6) + " * " + new BN(tradeRatio).toFixed(2) + " * " + config.staticMarkup + " * " + 
                             new BN(dynamicRatio).toFixed(2) + " * " +  config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
-                        this.api.updateQuote(quote.id, newSpot, newPremium)
+                        if (!pending) {
+                            this.api.updateQuote(quote.id, newSpot, newPremium)
+                            pending = true
+                        }
                     }
                 }
             }
