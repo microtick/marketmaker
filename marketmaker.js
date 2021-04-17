@@ -177,7 +177,7 @@ class MarketMaker extends DataFeedConsumer {
             const quote = await this.api.getLiveQuote(id)
             const dur = reverseLookup[quote.duration]
             quote.stale = (Date.now() - quote.modified) / 1000 > dur * config.stalePercent
-            quote.frozen = (Date.now() - quote.canModify)
+            quote.frozen = (Date.now() - quote.canModify) < 0
             quotes.push(quote)
             
             let currentBacking = 0
