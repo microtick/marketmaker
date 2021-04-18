@@ -83,6 +83,7 @@ class MarketMaker extends DataFeedConsumer {
         this.state = {
             funded: false
         }
+        this.processing = false
     }
     
     async init() {
@@ -112,6 +113,13 @@ class MarketMaker extends DataFeedConsumer {
         
         this.api.addBlockHandler(this.chainBlockHandler.bind(this))
         this.api.addTickHandler(this.chainTickHandler.bind(this))
+        
+        const info = await this.api.getAccountInfo(wallet.account.acct)
+        this.state.funded = info.balance >= config.minBalance
+        this.state.funds = info.balance
+        if (!this.state.funded) {
+            logger.error("Out of funds: " + wallet.account.acct + ": " + this.state.funds)
+        }
     }
     
     async doPrompt(message) {
@@ -147,6 +155,9 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     async chainBlockHandler(block) {
+        if (this.processing) return
+        this.processing = true
+        
         const info = await this.api.getAccountInfo(wallet.account.acct)
         this.state.funded = info.balance >= config.minBalance
         this.state.funds = info.balance
@@ -163,7 +174,7 @@ class MarketMaker extends DataFeedConsumer {
             }
             
             // Settle trade if expiration is past
-            if (Date.now() - trade.expiration > 0) {
+            if (Date.now() - trade.expiration > config.blocktime) {
                 logger.info("Settling trade " + id)
                 this.api.settleTrade(trade.id)
             }
@@ -176,8 +187,8 @@ class MarketMaker extends DataFeedConsumer {
             
             const quote = await this.api.getLiveQuote(id)
             const dur = reverseLookup[quote.duration]
-            quote.stale = (Date.now() - quote.modified) / 1000 > dur * config.stalePercent
-            quote.frozen = (Date.now() - quote.canModify) < 0
+            quote.stale = (Date.now() - quote.modified) / 1000 > dur * config.staleFraction
+            quote.frozen = (Date.now() - quote.canModify) < config.blocktime
             quotes.push(quote)
             
             let currentBacking = 0
@@ -187,25 +198,26 @@ class MarketMaker extends DataFeedConsumer {
             } else {
                 currentBacking = quoteBacking[dur]
                 quoteBacking[dur] = new BN(quoteBacking[dur]).plus(quote.backing).toNumber()
+            }
+            
+            if (!quote.frozen) {
+                
                 if (quote.backing < config.minBacking || quote.backing > config.maxBacking || quoteBacking[dur] > config.backing[dur]) {
                     // Cancel quote
                     logger.info("Canceling quote " + id + " (backing): " + quote.market + " " + quote.duration + " " + quote.backing + "dai")
-                    quoteBacking[dur] -= quote.backing
+                    quoteBacking[dur] = new BN(quoteBacking[dur]).minus(quote.backing).toNumber()
                     if (!pending) {
                         this.api.cancelQuote(quote.id)
                         pending = true
                     }
                 }
-            }
             
-            if (!quote.frozen) {
-                
                 if (this.state.targetSpot !== undefined && this.state.targetPremiums !== undefined) {
                         
                     let spotAdjustment = this.state.targetSpot
                     let deltaAdjustment = 0
-                    if (this.state.consensus !== undefined) {
-                        spotAdjustment = config.externalSpotWeight * this.state.targetSpot + (1 - config.externalSpotWeight) * this.state.consensus
+                    if (this.state.consensus !== undefined && this.state.consensus > 0) {
+                        //spotAdjustment = config.externalSpotWeight * this.state.targetSpot + (1 - config.externalSpotWeight) * this.state.consensus
                         deltaAdjustment = Math.abs(spotAdjustment - this.state.consensus) / 2
                     }
                     
@@ -253,6 +265,8 @@ class MarketMaker extends DataFeedConsumer {
         this.state.quoteBacking = quoteBacking
         this.state.tradeBacking = tradeBacking
         //console.log(JSON.stringify(this.state, null, 2))
+        
+        this.processing = false
     }
     
     chainTickHandler(symbol, payload) {
@@ -261,14 +275,17 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     microtickCallback(symbol, spot, premiums) {
+        if (this.processing) return
+        this.processing = true
+        
         //console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
         this.state.targetSpot = spot
         this.state.targetPremiums = premiums
         if (this.state.funded) {
             let spotAdjustment = spot
             let deltaAdjustment = 0
-            if (this.state.consensus !== undefined) {
-                spotAdjustment = config.externalSpotWeight * spot + (1 - config.externalSpotWeight) * this.state.consensus
+            if (this.state.consensus !== undefined && this.state.consensus > 0) {
+                //spotAdjustment = config.externalSpotWeight * spot + (1 - config.externalSpotWeight) * this.state.consensus
                 deltaAdjustment = Math.abs(spotAdjustment - this.state.consensus) / 2
             }
             Object.keys(this.state.targetPremiums).map(dur => {
@@ -312,6 +329,8 @@ class MarketMaker extends DataFeedConsumer {
                 logger.error("Out of funds: " + wallet.account.acct + ": " + this.state.funds)
             }
         }
+        
+        this.processing = false
     }
     
 }
