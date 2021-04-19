@@ -4,7 +4,8 @@ import { DataFeedProducer } from './DataFeed.js'
 const kraken = "https://api.kraken.com/0/public"
 const symbols = {
     XBTUSD: "XXBTZUSD",
-    ETHUSD: "XETHZUSD"
+    ETHUSD: "XETHZUSD",
+    ATOMUSD: "ATOMUSD"
 }
 const sampleTime = 10
 
