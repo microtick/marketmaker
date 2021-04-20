@@ -1,0 +1,27 @@
+{
+  "api": "http://localhost:1320",
+  "chain": {
+    "blocktime": 6000,
+    "markets": [
+      "ETHUSD", "XBTUSD", "ATOMUSD"
+    ],
+    "durations": {
+      "5minute": 300,
+      "15minute": 900,
+      "1hour": 3600,
+      "4hour": 14400,
+      "12hour": 43200
+    }
+  },
+  "minBalance": 1000,
+  "staticMarkup": 1.5,
+  "dynamicMarkup": 0.5,
+  "premiumThreshold": 1.0,
+  "staleFraction": 0.5,
+  "targetBacking": {
+    "300": 200,
+    "900": 250
+  },
+  "minBacking": 25,
+  "maxBacking": 40 
+}
