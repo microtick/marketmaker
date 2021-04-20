@@ -44,9 +44,6 @@ fs.watchFile(configFile, () => {
     config = JSON.parse(fs.readFileSync(configFile))
 })
 
-const walletFile = "wallet.json"
-const wallet = JSON.parse(fs.readFileSync(walletFile))
-
 const api = "localhost:1320"
 
 process.on('unhandledRejection', error => {
@@ -72,27 +69,27 @@ class MarketMaker extends DataFeedConsumer {
     
     async init() {
         // Check for account on startup
-        if (wallet.account === undefined) {
+        if (config.account === undefined) {
           // Generate new account, encrypt private key with prompted password
           await this.api.init("software")
           const account = await this.api.getWallet()
           const password = await this.doPrompt("New account")
           account.priv = Buffer.from(sjcl.encrypt(password, account.priv)).toString('base64')
-          wallet.account = account
-          fs.writeFileSync(walletFile, JSON.stringify(wallet, null, 2))
-          console.log("Updated your wallet with new generated account: ")
-          console.log(JSON.stringify(wallet.account, null, 2))
+          config.account = account
+          fs.writeFileSync(configFile, JSON.stringify(config, null, 2))
+          console.log("Updated your config with new generated account: ")
+          console.log(JSON.stringify(config.account, null, 2))
         
           process.exit()
         } else {
           const password = await this.doPrompt("Account")
           try {
-            wallet.account.priv = sjcl.decrypt(password, Buffer.from(wallet.account.priv, 'base64').toString())
+            config.account.priv = sjcl.decrypt(password, Buffer.from(config.account.priv, 'base64').toString())
           } catch (err) {
             console.log("Invalid password")
             process.exit()
           }
-          await this.api.init(wallet.account)
+          await this.api.init(config.account)
         }
         
         this.lookup = {}
@@ -104,11 +101,11 @@ class MarketMaker extends DataFeedConsumer {
         this.api.addBlockHandler(this.chainBlockHandler.bind(this))
         this.api.addTickHandler(this.chainTickHandler.bind(this))
         
-        const info = await this.api.getAccountInfo(wallet.account.acct)
+        const info = await this.api.getAccountInfo(config.account.acct)
         this.state.funded = info.balance >= config.minBalance
         this.state.funds = info.balance
         if (!this.state.funded) {
-            logger.error("Out of funds: " + wallet.account.acct + ": " + this.state.funds)
+            logger.error("Out of funds: " + config.account.acct + ": " + this.state.funds + ", need: " + config.minBalance + "dai")
         }
     }
     
@@ -150,7 +147,7 @@ class MarketMaker extends DataFeedConsumer {
         if (this.processing) return
         this.processing = true
         
-        const info = await this.api.getAccountInfo(wallet.account.acct)
+        const info = await this.api.getAccountInfo(config.account.acct)
         this.state.funded = info.balance >= config.minBalance
         this.state.funds = info.balance
         
@@ -322,7 +319,7 @@ class MarketMaker extends DataFeedConsumer {
             })
         } else {
             if (this.state.funds !== undefined) {
-                logger.error("Out of funds: " + wallet.account.acct + ": " + this.state.funds)
+                logger.error("Out of funds: " + config.account.acct + ": " + this.state.funds + ", need: " + config.minBalance + "dai")
             }
         }
         
