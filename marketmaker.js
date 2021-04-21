@@ -220,9 +220,8 @@ class MarketMaker extends DataFeedConsumer {
                         thisTradeBacking = tradeBacking[market][dur]
                     }
                     
-                    const tradeRatio = 1 + thisTradeBacking / config.targetBacking[dur]
-                    const dynamicRatio = 1 + currentBacking / config.targetBacking[dur]
-                    const markupPremium = this.state.markets[market].targetPremiums[dur] * tradeRatio * config.staticMarkup * dynamicRatio * config.dynamicMarkup
+                    const dynamicMarkup = 1 + config.dynamicMarkup * (thisTradeBacking + currentBacking) / config.targetBacking[dur]
+                    const markupPremium = this.state.markets[market].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
                     
                     // Update if stale
@@ -231,8 +230,8 @@ class MarketMaker extends DataFeedConsumer {
                         const newPremium = new BN(quotePremium).toFixed(6) + "premium"
                         if (!pending) {
                             logger.info("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
-                                "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + new BN(tradeRatio).toFixed(2) + " * " + config.staticMarkup + " * " + 
-                                new BN(dynamicRatio).toFixed(2) + " * " +  config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
+                                "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
+                                new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
                             this.api.updateQuote(quote.id, newSpot, newPremium)
                             pending = true
                         }
@@ -245,8 +244,8 @@ class MarketMaker extends DataFeedConsumer {
                         const newPremium = new BN(quotePremium).toFixed(6) + "premium"
                         if (!pending) {
                             logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
-                                "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + new BN(tradeRatio).toFixed(2) + " * " + config.staticMarkup + " * " + 
-                                new BN(dynamicRatio).toFixed(2) + " * " +  config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
+                                "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
+                                new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
                             this.api.updateQuote(quote.id, newSpot, newPremium)
                             pending = true
                         }
@@ -291,9 +290,8 @@ class MarketMaker extends DataFeedConsumer {
                     thisTradeBacking = this.state.tradeBacking[symbol][dur]
                 }
                 if (config.targetBacking[dur] > currentBacking) {
-                    const tradeRatio = 1 + thisTradeBacking / config.targetBacking[dur]
-                    const dynamicRatio = 1 + currentBacking / config.targetBacking[dur]
-                    const markupPremium = this.state.markets[symbol].targetPremiums[dur] * tradeRatio * config.staticMarkup * dynamicRatio * config.dynamicMarkup
+                    const dynamicMarkup = 1 + config.dynamicMarkup * (thisTradeBacking + currentBacking) / config.targetBacking[dur]
+                    const markupPremium = this.state.markets[symbol].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
                     
                     let targetBacking = config.targetBacking[dur] - currentBacking
@@ -309,8 +307,8 @@ class MarketMaker extends DataFeedConsumer {
                         const tmpPremium = new BN(quotePremium).toFixed(6) + "premium"
                     
                         logger.info("Creating quote: " + symbol + " " + tmpDuration + " " + tmpBacking + " " + tmpSpot + " " + 
-                            "[" + new BN(this.state.markets[symbol].targetPremiums[dur]).toFixed(6) + " * " + new BN(tradeRatio).toFixed(2) + " * " + config.staticMarkup + " * " + 
-                            new BN(dynamicRatio).toFixed(2) + " * " +  config.dynamicMarkup + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + tmpPremium + "]")
+                            "[" + new BN(this.state.markets[symbol].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
+                            new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + tmpPremium + "]")
                         this.api.createQuote(symbol, tmpDuration, tmpBacking, tmpSpot, tmpPremium)
                     } else {
                         logger.warn("Skipping quote creation (min backing): " + symbol + " " + tmpDuration + " " + new BN(targetBacking).toFixed(6) + "dai < " + config.minBacking + "dai") 
