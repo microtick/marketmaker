@@ -35,13 +35,60 @@ The consensus spot price has moved higher (A)...
 
 ### Market Making Strategy
 
-Because of the way Dynamic Quotes operate, the market making strategy for Microtick is typically as follows:
+Because of the way Dynamic Quotes operate, the market making strategy for Microtick should be as follows:
 
-1. Compute a fair value for option premium based on the real-world observed volatility.
-2. Mark up the premium by some amount to create a margin-of-error window within which the dynamic premium will remain above fair value for both puts and calls.
-3. When the consensus price or the real-world price changes, rebase the quoted spot to recenter the quote.
+1. Market maker computes a fair value for option premium based on real-world observed volatility.
+2. Market maker marks up the premium by some amount to create a margin-of-error window within which the dynamic premium will remain above fair value for both puts and calls, as long as the consensus price stays within the margin window.
+3. When the consensus price or the real-world price changes outside the margin range, rebase the quoted spot (and optionally the premium as well) to recenter the quote.
 
 ![Market making strategy](/docs/Market%20Making%20Strategy.svg)
 
 ## Toolkit Operation
 
+The toolkit is designed to be modular, with all functional blocks communicating using a discovery protocol built on top of redis pub/sub messaging.
+
+### Price Feeds
+
+Multiple price feeds can be constructed using the existing price feed components as a model. Currently Kraken and Coincap are supported. If you write
+a new price feed, please create a PR and add it to the repository!
+
+![Toolkit functional diagram](/docs/Toolkit%20Functional%20Diagram.svg)
+
+### Aggregator
+
+The aggregator module keeps track of the currently live price feeds and averages the latest price samples from each feed for a particular market. The
+mapping of price feed to a standard market symbol (i.e. ETHUSD is "ethereum" on coincap and XETHZUSD in Kraken) is handled in the price feed.
+
+Note that discovery protocol is designed to allow any module to be stopped / restarted without affecting the system operation. This means you can add
+or stop price feeds at any time, even during live operation and the aggregator module will handle the averaging appropriately.
+
+### Option Pricer
+
+The option pricer takes the aggregated feed and calculates the real-time short-term volatility at 1-minute intervals. It then messages out the aggregated
+spot price and the calculated fair value premiums for each market on the appropriate channel.
+
+### Market Maker
+
+The market maker monitors the real-time price information and the option pricer output, and uses these events to manage on-chain quotes for each market.
+This market maker module can handle multiple markets from a single hot wallet, making managing funds across wallets much easier.
+
+The customizable parameters for the market maker are as follows (set in config.json):
+
+* minBalance (default 1000): This is the minimum balance required before the market maker will start. If there are not enough funds, a message is printed
+on the console and the system will recover by simply depositing the required funds to the hot wallet (no restart required).
+* staticMarkup (default 1.5): This is the markup mentioned in the "Market Making Strategy" section above. A setting of 1.5 means 50% will be added to the fair value (i.e. if fair value is 8, the market maker will place quotes at 12)
+* dynamicMarkup (default  0.5): This parameter allows you to set the sensitivity of premiums to open interest in the market. A setting of 0.5 means that if all
+the quote backing for this duration is traded off the market and is active in trades, then another 25% will be added to the premiums. This is linear, so if 
+there is twice the premium allocated for backing currently active in trades, then
+
+in progress
+
+  "premiumThreshold": 1,
+  "staleFraction": 0.5,
+  "targetBacking": {
+    "300": 200,
+    "900": 250,
+    "3600": 100
+  },
+  "minBacking": 25,
+  "maxBacking": 40,
