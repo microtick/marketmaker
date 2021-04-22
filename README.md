@@ -35,13 +35,85 @@ The consensus spot price has moved higher (A)...
 
 ### Market Making Strategy
 
-Because of the way Dynamic Quotes operate, the market making strategy for Microtick is typically as follows:
+Because of the way Dynamic Quotes operate, the market making strategy for Microtick should be as follows:
 
-1. Compute a fair value for option premium based on the real-world observed volatility.
-2. Mark up the premium by some amount to create a margin-of-error window within which the dynamic premium will remain above fair value for both puts and calls.
-3. When the consensus price or the real-world price changes, rebase the quoted spot to recenter the quote.
+1. Market maker computes a fair value for option premium based on real-world observed volatility.
+2. Market maker marks up the premium by some amount to create a margin-of-error window within which the dynamic premium will remain above fair value for both puts and calls, as long as the consensus price stays within the margin window.
+3. When the consensus price or the real-world price changes outside the margin range, rebase the quoted spot (and optionally the premium as well) to recenter the quote.
 
 ![Market making strategy](/docs/Market%20Making%20Strategy.svg)
 
 ## Toolkit Operation
 
+The toolkit is designed to be modular, with all functional blocks communicating using a discovery protocol built on top of redis pub/sub messaging.
+
+### Price Feeds
+
+Multiple price feeds can be constructed using the existing price feed components as a model. Currently Kraken and Coincap are supported. If you write
+a new price feed, please create a PR and add it to the repository!
+
+![Toolkit functional diagram](/docs/Toolkit%20Functional%20Diagram.svg)
+
+### Aggregator
+
+The aggregator module keeps track of the currently live price feeds and averages the latest price samples from each feed for a particular market. The
+mapping of price feed to a standard market symbol (i.e. ETHUSD is "ethereum" on coincap and XETHZUSD in Kraken) is handled in the price feed.
+
+Note that discovery protocol is designed to allow any module to be stopped / restarted without affecting the system operation. This means you can add
+or stop price feeds at any time, even during live operation and the aggregator module will handle the averaging appropriately.
+
+### Option Pricer
+
+The option pricer takes the aggregated feed and calculates the real-time short-term volatility at 1-minute intervals. It then messages out the aggregated
+spot price and the calculated fair value premiums for each market on the appropriate channel.
+
+### Market Maker
+
+The market maker monitors the real-time price information and the option pricer output, and uses these events to manage on-chain quotes for each market.
+This market maker module can handle multiple markets from a single hot wallet, making managing funds across wallets much easier.
+
+The customizable parameters for the market maker are as follows (set in config.json):
+
+* minBalance (default 1000): This is the minimum balance required before the market maker will start. If there are not enough funds, a message is printed
+on the console and the system will recover by simply depositing the required funds to the hot wallet (no restart required).
+* staticMarkup (default 1.5): This is the markup mentioned in the "Market Making Strategy" section above. A setting of 1.5 means 50% will be added to the fair value (i.e. if fair value is 8, the market maker will place quotes at 12)
+* dynamicMarkup (default  0.5): This parameter allows you to set the sensitivity of premiums to open interest in the market. The formula is 1 + dynamicMarkup * (trade backing + quote backing) / config backing. For a setting of 0.5 if there is an equal trade backing to quote backing, 50% will be added to all premiums for quotes. This makes quotes progressively more expensive if they as trade open interest grows (a form of risk management).
+* premiumThreshold (default 1): This sets the comparison threshold to trigger a quote to be rebalanced. A setting of 0.8 would allow dynamic premiums to reach 80%
+of fair value before rebalancing.
+* staleFraction (default 0.5): Fraction of the quote's duration after which the quote is considered "stale" and will be automatically updated. 0.5 for a 1 hour quote will cause the quote to be updated a minimum of every 1/2 hour.
+* targetBacking": example { "300": 200, "900": 250 }.  This allows you to specify the amount of backing to be allocated for each time duration.
+* minBacking (default 25): No quotes less than this amount of backing will be placed on the market.  If a quote is less than this amount, it will be canceled.
+* maxBacking (default 40): No quotes more than this amount will be placed on the market.  If the target backing for a duration is greater than this setting,
+multiple quotes will be managed on the market.
+
+## Operation
+
+### Prerequisites
+
+1. Make sure redis-server is installed
+2. Node.js is required as well
+3. "yarn install" in the home directory
+
+You must also have a running Microtick node and an API server running. The API server requires "mtcli rest-server" to be running in order to create
+transaction JSON. (Post-Stargate, this last requirement is no longer necessary).
+
+### Running
+
+1. Start the price feeds. As separate processes, run:
+
+```
+$ node kraken
+$ node coincap
+```
+
+2. Start the pricing module:
+
+```
+$ node pricer
+```
+
+3. Start the market maker:
+
+```
+$ node marketmaker
+```
