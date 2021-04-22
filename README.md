@@ -86,3 +86,34 @@ of fair value before rebalancing.
 * maxBacking (default 40): No quotes more than this amount will be placed on the market.  If the target backing for a duration is greater than this setting,
 multiple quotes will be managed on the market.
 
+## Operation
+
+### Prerequisites
+
+1. Make sure redis-server is installed
+2. Node.js is required as well
+3. "yarn install" in the home directory
+
+You must also have a running Microtick node and an API server running. The API server requires "mtcli rest-server" to be running in order to create
+transaction JSON. (Post-Stargate, this last requirement is no longer necessary).
+
+### Running
+
+1. Start the price feeds. As separate processes, run:
+
+```
+$ node kraken
+$ node coincap
+```
+
+2. Start the pricing module:
+
+```
+$ node pricer
+```
+
+3. Start the market maker:
+
+```
+$ node marketmaker
+```
