@@ -77,18 +77,12 @@ The customizable parameters for the market maker are as follows (set in config.j
 * minBalance (default 1000): This is the minimum balance required before the market maker will start. If there are not enough funds, a message is printed
 on the console and the system will recover by simply depositing the required funds to the hot wallet (no restart required).
 * staticMarkup (default 1.5): This is the markup mentioned in the "Market Making Strategy" section above. A setting of 1.5 means 50% will be added to the fair value (i.e. if fair value is 8, the market maker will place quotes at 12)
-* dynamicMarkup (default  0.5): This parameter allows you to set the sensitivity of premiums to open interest in the market. A setting of 0.5 means that if all
-the quote backing for this duration is traded off the market and is active in trades, then another 25% will be added to the premiums. This is linear, so if 
-there is twice the premium allocated for backing currently active in trades, then
+* dynamicMarkup (default  0.5): This parameter allows you to set the sensitivity of premiums to open interest in the market. The formula is 1 + dynamicMarkup * (trade backing + quote backing) / config backing. For a setting of 0.5 if there is an equal trade backing to quote backing, 50% will be added to all premiums for quotes. This makes quotes progressively more expensive if they as trade open interest grows (a form of risk management).
+* premiumThreshold (default 1): This sets the comparison threshold to trigger a quote to be rebalanced. A setting of 0.8 would allow dynamic premiums to reach 80%
+of fair value before rebalancing.
+* staleFraction (default 0.5): Fraction of the quote's duration after which the quote is considered "stale" and will be automatically updated. 0.5 for a 1 hour quote will cause the quote to be updated a minimum of every 1/2 hour.
+* targetBacking": example { "300": 200, "900": 250 }.  This allows you to specify the amount of backing to be allocated for each time duration.
+* minBacking (default 25): No quotes less than this amount of backing will be placed on the market.  If a quote is less than this amount, it will be canceled.
+* maxBacking (default 40): No quotes more than this amount will be placed on the market.  If the target backing for a duration is greater than this setting,
+multiple quotes will be managed on the market.
 
-in progress
-
-  "premiumThreshold": 1,
-  "staleFraction": 0.5,
-  "targetBacking": {
-    "300": 200,
-    "900": 250,
-    "3600": 100
-  },
-  "minBacking": 25,
-  "maxBacking": 40,
