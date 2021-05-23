@@ -160,6 +160,15 @@ class MarketMaker extends DataFeedConsumer {
         this.processing = true
         
         const info = await this.api.getAccountInfo(config.account.acct)
+        const max = Math.max(info.totalActiveQuotes, info.totalActiveTrades)
+        if (max > info.limit) {
+          for (i=info.limit; i<max; i+=info.limit) {
+            const tmp = await this.api.getAccountInfo(config.account.acct, i, info.limit)
+            info.activeQuotes = info.activeQuotes.concat(tmp.activeQuotes)
+            info.activeTrades = info.activeTrades.concat(tmp.activeTrades)
+          }
+        }
+        
         this.state.funded = info.balances.backing >= config.minBalance
         this.state.funds = info.balances.backing
         
@@ -329,7 +338,7 @@ class MarketMaker extends DataFeedConsumer {
             })
         } else {
             if (this.state.funds !== undefined) {
-                logger.error("Out of funds: " + config.account.acct + ": " + this.state.funds + ", need: " + config.minBalance + "backing")
+                logger.error("Out of funds: " + this.wallet.getAddress() + ": " + this.state.funds + ", need: " + config.minBalance + "backing")
             }
         }
         
