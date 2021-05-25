@@ -245,10 +245,11 @@ class MarketMaker extends DataFeedConsumer {
                     const markupPremium = this.state.markets[market].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
                     
+                    const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
+                    const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                   
                     // Update if stale
                     if (quote.stale) {
-                        const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
-                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
                         if (!pending) {
                             logger.info("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
                                 "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
@@ -260,9 +261,7 @@ class MarketMaker extends DataFeedConsumer {
                     
                     // Update if premium in either direction drops below target
                     const thresholdPremium = this.state.markets[market].targetPremiums[dur] * config.premiumThreshold
-                    if (Math.min(quote.premiumAsCall, quote.premiumAsPut) < thresholdPremium) {
-                        const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
-                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                    if (Math.min(quote.callAsk, quote.putAsk) < thresholdPremium) {
                         if (!pending) {
                             logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
                                 "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
