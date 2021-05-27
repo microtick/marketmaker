@@ -283,7 +283,6 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     microtickCallback(symbol, spot, premiums) {
-        //console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
         this.state.markets[symbol].targetSpot = spot
         this.state.markets[symbol].targetPremiums = premiums
         if (this.state.funded) {
@@ -302,7 +301,7 @@ class MarketMaker extends DataFeedConsumer {
                 if (this.state.tradeBacking !== undefined && this.state.tradeBacking[symbol] !== undefined && this.state.tradeBacking[symbol][dur] !== undefined) {
                     thisTradeBacking = this.state.tradeBacking[symbol][dur]
                 }
-                if (currentBacking > 0 && config.targetBacking[dur] > currentBacking) {
+                if (config.targetBacking[dur] > currentBacking) {
                     const dynamicMarkup = 1 + config.dynamicMarkup * (thisTradeBacking + currentBacking) / config.targetBacking[dur]
                     const markupPremium = this.state.markets[symbol].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
