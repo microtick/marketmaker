@@ -66,7 +66,6 @@ class MarketMaker extends DataFeedConsumer {
             funded: false,
             markets: {}
         }
-        this.processing = false
     }
     
     async init() {
@@ -156,9 +155,6 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     async chainBlockHandler(block) {
-        if (this.processing) return
-        this.processing = true
-        
         const info = await this.api.getAccountInfo(config.account.acct)
         const max = Math.max(info.totalActiveQuotes, info.totalActiveTrades)
         if (max > info.limit) {
@@ -261,7 +257,9 @@ class MarketMaker extends DataFeedConsumer {
                     
                     // Update if premium in either direction drops below target
                     const thresholdPremium = this.state.markets[market].targetPremiums[dur] * config.premiumThreshold
-                    if (Math.min(quote.callAsk, quote.putAsk) < thresholdPremium) {
+                    const minPremium = Math.min(quote.callAsk, quote.putAsk)
+                    //logger.info(dur + " " + thresholdPremium + " " + minPremium)
+                    if (minPremium < thresholdPremium) {
                         if (!pending) {
                             logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
                                 "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
@@ -277,8 +275,6 @@ class MarketMaker extends DataFeedConsumer {
         this.state.quoteBacking = quoteBacking
         this.state.tradeBacking = tradeBacking
         //console.log(JSON.stringify(this.state, null, 2))
-        
-        this.processing = false
     }
     
     chainTickHandler(symbol, payload) {
@@ -287,9 +283,6 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     microtickCallback(symbol, spot, premiums) {
-        if (this.processing) return
-        this.processing = true
-        
         //console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
         this.state.markets[symbol].targetSpot = spot
         this.state.markets[symbol].targetPremiums = premiums
@@ -309,7 +302,7 @@ class MarketMaker extends DataFeedConsumer {
                 if (this.state.tradeBacking !== undefined && this.state.tradeBacking[symbol] !== undefined && this.state.tradeBacking[symbol][dur] !== undefined) {
                     thisTradeBacking = this.state.tradeBacking[symbol][dur]
                 }
-                if (config.targetBacking[dur] > currentBacking) {
+                if (currentBacking > 0 && config.targetBacking[dur] > currentBacking) {
                     const dynamicMarkup = 1 + config.dynamicMarkup * (thisTradeBacking + currentBacking) / config.targetBacking[dur]
                     const markupPremium = this.state.markets[symbol].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
@@ -340,8 +333,6 @@ class MarketMaker extends DataFeedConsumer {
                 logger.error("Out of funds: " + this.wallet.getAddress() + ": " + this.state.funds + ", need: " + config.minBalance + "backing")
             }
         }
-        
-        this.processing = false
     }
     
 }
