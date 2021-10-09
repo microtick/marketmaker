@@ -13,5 +13,6 @@ class Monitor extends DataFeedConsumer {
 }
 
 const monitor = new Monitor()
-//monitor.subscribeTicker("XBTUSD")
+monitor.subscribeTicker("XBTUSD")
 monitor.subscribeTicker("ETHUSD")
+monitor.subscribeTicker("XBTETH")

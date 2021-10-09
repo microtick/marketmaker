@@ -5,6 +5,9 @@ import prompt from 'prompt'
 import sjcl from 'sjcl'
 import BN from 'bignumber.js'
 
+import microtick from 'mtapi'
+import { SoftwareSigner } from 'mtapi'
+
 import winston from 'winston'
 
 const { combine, timestamp, printf } = winston.format
@@ -35,8 +38,6 @@ if (process.env.NODE_ENV !== 'production') {
   }))
 }
 
-import microtick from 'mtapi'
-
 const configFile = "config.json"
 let config = JSON.parse(fs.readFileSync(configFile))
 fs.watchFile(configFile, () => {
@@ -59,37 +60,47 @@ class MarketMaker extends DataFeedConsumer {
         super("marketmaker")
         logger.info("Starting market maker")
         this.logging = false
-        this.api = new microtick(config.api)
+        this.api = new microtick()
+        this.api.setUrl(config.api)
         this.state = {
             funded: false,
             markets: {}
         }
-        this.processing = false
     }
     
     async init() {
         // Check for account on startup
         if (config.account === undefined) {
           // Generate new account, encrypt private key with prompted password
-          await this.api.init("software")
-          const account = await this.api.getWallet()
+          this.wallet = new SoftwareSigner()
+          const mnemonic = await this.wallet.generateNewMnemonic()
+          await this.wallet.initFromMnemonic(mnemonic, "micro", 0, 0)
           const password = await this.doPrompt("New account")
-          account.priv = Buffer.from(sjcl.encrypt(password, account.priv)).toString('base64')
-          config.account = account
+          const data = Buffer.from(sjcl.encrypt(password, this.wallet.priv.toString('hex'))).toString('base64')
+          config.account = data
           fs.writeFileSync(configFile, JSON.stringify(config, null, 2))
-          console.log("Updated your config with new generated account: ")
-          console.log(JSON.stringify(config.account, null, 2))
+          console.log()
+          console.log("Updated your config with a new generated account:")
+          console.log(this.wallet.getAddress())
+          console.log()
+          console.log("Save these words as a backup, you will not have another chance:")
+          console.log(mnemonic)
+          console.log()
         
           process.exit()
         } else {
           const password = await this.doPrompt("Account")
           try {
-            config.account.priv = sjcl.decrypt(password, Buffer.from(config.account.priv, 'base64').toString())
+            this.wallet = new SoftwareSigner()
+            const priv = sjcl.decrypt(password, Buffer.from(config.account, 'base64').toString())
+            await this.wallet.initFromPrivateKey("micro", Buffer.from(priv, 'hex'))
+            this.api.setSigner(this.wallet)
+            await this.api.init()
           } catch (err) {
             console.log("Invalid password")
+            console.log(err)
             process.exit()
           }
-          await this.api.init(config.account)
         }
         
         this.lookup = {}
@@ -102,10 +113,10 @@ class MarketMaker extends DataFeedConsumer {
         this.api.addTickHandler(this.chainTickHandler.bind(this))
         
         const info = await this.api.getAccountInfo(config.account.acct)
-        this.state.funded = info.balance >= config.minBalance
-        this.state.funds = info.balance
+        this.state.funded = info.balances.backing >= config.minBalance
+        this.state.funds = info.balances.backing
         if (!this.state.funded) {
-            logger.error("Out of funds: " + config.account.acct + ": " + this.state.funds + ", need: " + config.minBalance + "dai")
+          logger.error("Out of funds: " + this.wallet.getAddress() + " have: " + this.state.funds + "backing, need: " + config.minBalance + "backing")
         }
     }
     
@@ -144,12 +155,18 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     async chainBlockHandler(block) {
-        if (this.processing) return
-        this.processing = true
-        
         const info = await this.api.getAccountInfo(config.account.acct)
-        this.state.funded = info.balance >= config.minBalance
-        this.state.funds = info.balance
+        const max = Math.max(info.totalActiveQuotes, info.totalActiveTrades)
+        if (max > info.limit) {
+          for (i=info.limit; i<max; i+=info.limit) {
+            const tmp = await this.api.getAccountInfo(config.account.acct, i, info.limit)
+            info.activeQuotes = info.activeQuotes.concat(tmp.activeQuotes)
+            info.activeTrades = info.activeTrades.concat(tmp.activeTrades)
+          }
+        }
+        
+        this.state.funded = info.balances.backing >= config.minBalance
+        this.state.funds = info.balances.backing
         
         const tradeBacking = {}
         for (i=0; i<info.activeTrades.length; i++) {
@@ -196,15 +213,17 @@ class MarketMaker extends DataFeedConsumer {
             
             if (!quote.frozen) {
                 
+                /*
                 if (quote.backing < config.minBacking || quote.backing > config.maxBacking || quoteBacking[market][dur] > config.targetBacking[dur]) {
                     // Cancel quote
                     if (!pending) {
                         quoteBacking[market][dur] = new BN(quoteBacking[market][dur]).minus(quote.backing).toNumber()
-                        logger.info("Canceling quote " + id + " (backing): " + quote.market + " " + quote.duration + " " + quote.backing + "dai")
+                        logger.info("Canceling quote " + id + " (backing): " + quote.market + " " + quote.duration + " " + quote.backing + "backing")
                         this.api.cancelQuote(quote.id)
                         pending = true
                     }
                 }
+                */
             
                 if (this.state.markets[market].targetSpot !== undefined && this.state.markets[market].targetPremiums !== undefined) {
                         
@@ -224,29 +243,30 @@ class MarketMaker extends DataFeedConsumer {
                     const markupPremium = this.state.markets[market].targetPremiums[dur] * config.staticMarkup * dynamicMarkup
                     const quotePremium = markupPremium + deltaAdjustment
                     
+                    const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
+                    const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                   
                     // Update if stale
                     if (quote.stale) {
-                        const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
-                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
                         if (!pending) {
-                            logger.info("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
+                            logger.info("Updating quote (stale): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
                                 "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
                                 new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
-                            this.api.updateQuote(quote.id, newSpot, newPremium)
+                            this.api.updateQuote(quote.id, newSpot, newPremium, "0premium")
                             pending = true
                         }
                     }
                     
                     // Update if premium in either direction drops below target
                     const thresholdPremium = this.state.markets[market].targetPremiums[dur] * config.premiumThreshold
-                    if (Math.min(quote.premiumAsCall, quote.premiumAsPut) < thresholdPremium) {
-                        const newSpot = new BN(spotAdjustment).toFixed(6) + "spot"
-                        const newPremium = new BN(quotePremium).toFixed(6) + "premium"
+                    const minPremium = Math.min(quote.callAsk, quote.putAsk)
+                    //logger.info(dur + " " + thresholdPremium + " " + minPremium)
+                    if (minPremium < thresholdPremium) {
                         if (!pending) {
-                            logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "dai " + newSpot + " " + 
+                            logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
                                 "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
                                 new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
-                            this.api.updateQuote(quote.id, newSpot, newPremium)
+                            this.api.updateQuote(quote.id, newSpot, newPremium, "0premium")
                             pending = true
                         }
                     }
@@ -257,8 +277,6 @@ class MarketMaker extends DataFeedConsumer {
         this.state.quoteBacking = quoteBacking
         this.state.tradeBacking = tradeBacking
         //console.log(JSON.stringify(this.state, null, 2))
-        
-        this.processing = false
     }
     
     chainTickHandler(symbol, payload) {
@@ -267,10 +285,6 @@ class MarketMaker extends DataFeedConsumer {
     }
     
     microtickCallback(symbol, spot, premiums) {
-        if (this.processing) return
-        this.processing = true
-        
-        //console.log(symbol + ": " + spot + " " + JSON.stringify(premiums))
         this.state.markets[symbol].targetSpot = spot
         this.state.markets[symbol].targetPremiums = premiums
         if (this.state.funded) {
@@ -302,26 +316,25 @@ class MarketMaker extends DataFeedConsumer {
                     // Only create the quote if it's larger than minBacking
                     const tmpDuration = this.lookup[dur]
                     if (targetBacking >= config.minBacking) {
-                        const tmpBacking = new BN(targetBacking).toFixed(6) + "dai"
+                        const tmpBacking = new BN(targetBacking).toFixed(6) + "backing"
                         const tmpSpot = new BN(spotAdjustment).toFixed(6) + "spot"
                         const tmpPremium = new BN(quotePremium).toFixed(6) + "premium"
                     
                         logger.info("Creating quote: " + symbol + " " + tmpDuration + " " + tmpBacking + " " + tmpSpot + " " + 
                             "[" + new BN(this.state.markets[symbol].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
                             new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + tmpPremium + "]")
-                        this.api.createQuote(symbol, tmpDuration, tmpBacking, tmpSpot, tmpPremium)
-                    } else {
-                        logger.warn("Skipping quote creation (min backing): " + symbol + " " + tmpDuration + " " + new BN(targetBacking).toFixed(6) + "dai < " + config.minBacking + "dai") 
+                        this.api.createQuote(symbol, tmpDuration, tmpBacking, tmpSpot, tmpPremium, "0premium")
+                    } 
+                    else {
+                        logger.warn("Skipping quote creation (min backing): " + symbol + " " + tmpDuration + " " + new BN(targetBacking).toFixed(6) + "backing < " + config.minBacking + "backing") 
                     }
                 }
             })
         } else {
             if (this.state.funds !== undefined) {
-                logger.error("Out of funds: " + config.account.acct + ": " + this.state.funds + ", need: " + config.minBalance + "dai")
+                logger.error("Out of funds: " + this.wallet.getAddress() + ": " + this.state.funds + ", need: " + config.minBalance + "backing")
             }
         }
-        
-        this.processing = false
     }
     
 }

@@ -41,6 +41,7 @@ export class DataFeedProducer extends SystemNode {
                 tick: price
             }))
         }
+        return price
     }
 
     pubVol() {
