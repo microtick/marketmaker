@@ -26,11 +26,15 @@ export default class SystemNode {
             } else {
                 // Uptime monitoring
                 if (chan !== this.uuid) {
-                    clearTimeout(this.peers[chan].timeout)
-                    this.peers[chan].timeout = setTimeout(
-                        this.peerTimeout.bind(this, chan),
-                        ANNOUNCE_INTERVAL * 1.5
-                    )
+                    try {
+                        clearTimeout(this.peers[chan].timeout)
+                        this.peers[chan].timeout = setTimeout(
+                            this.peerTimeout.bind(this, chan),
+                            ANNOUNCE_INTERVAL * 1.5
+                        )
+                    } catch (err) {
+                        console.log(err)
+                    }
                 }
             }
         })
@@ -76,6 +80,7 @@ export default class SystemNode {
     
     peerTimeout(uuid) {
         this.subClient.unsubscribe(uuid)
+        clearTimeout(this.peers[uuid].timeout)
         delete this.peers[uuid]
         if (this.logging) {
             console.log("Peer disconnected: " + uuid)

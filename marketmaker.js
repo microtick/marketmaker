@@ -213,6 +213,7 @@ class MarketMaker extends DataFeedConsumer {
             
             if (!quote.frozen) {
                 
+                /*
                 if (quote.backing < config.minBacking || quote.backing > config.maxBacking || quoteBacking[market][dur] > config.targetBacking[dur]) {
                     // Cancel quote
                     if (!pending) {
@@ -222,6 +223,7 @@ class MarketMaker extends DataFeedConsumer {
                         pending = true
                     }
                 }
+                */
             
                 if (this.state.markets[market].targetSpot !== undefined && this.state.markets[market].targetPremiums !== undefined) {
                         
@@ -322,7 +324,8 @@ class MarketMaker extends DataFeedConsumer {
                             "[" + new BN(this.state.markets[symbol].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
                             new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + tmpPremium + "]")
                         this.api.createQuote(symbol, tmpDuration, tmpBacking, tmpSpot, tmpPremium, "0premium")
-                    } else {
+                    } 
+                    else {
                         logger.warn("Skipping quote creation (min backing): " + symbol + " " + tmpDuration + " " + new BN(targetBacking).toFixed(6) + "backing < " + config.minBacking + "backing") 
                     }
                 }
