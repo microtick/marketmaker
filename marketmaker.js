@@ -5,8 +5,8 @@ import prompt from 'prompt'
 import sjcl from 'sjcl'
 import BN from 'bignumber.js'
 
-import microtick from 'mtapi'
-import { SoftwareSigner } from 'mtapi'
+import microtick from 'microtick'
+import { SoftwareSigner } from 'microtick'
 
 import winston from 'winston'
 
