@@ -86,33 +86,86 @@ of fair value before rebalancing.
 * maxBacking (default 40): No quotes more than this amount will be placed on the market.  If the target backing for a duration is greater than this setting,
 multiple quotes will be managed on the market.
 
+#### Market maker config settings
+
+```
+  "api": This should point to the MTAPI port, default 1320
+  "chain": {
+    "blocktime": Time in ms between blocks, used in calculating volatility
+    "markets": Array of markets you want to cover with quote updates
+    "durations": Object with duration lengths and names you want to cover
+  },
+  "minBalance": The minimum account balance (in backing) you want to maintain
+  "staticMarkup": Base multiplier for all quotes.  1.0 = no markup, 2.0 = double the premium, etc.
+  "dynamicMarkup": Rate of increase of markup based on open interest. If there are a lot of trades coming in, your market maker will automatically increase the premium according to this rate.
+  "premiumThreshold": Threshold below which a quote should be updated. Should be less than 1.0. The closer this is set to 1.0, the more frequent the quote updates will be because it will take less price movement to trigger.
+  "staleFraction": Fraction of quote duration to trigger an automatic update to prevent quotes from going stale. A setting of 0.5 will update a 300 duration quote automatically after 150 seconds of inactivity, or a half hour quote after 15 minutes.
+  "targetBacking": How much backing you want in the quote on each time duration.
+  "minBacking": Minumum backing for a quote. If the difference between actual backing and target backing is less than this, no new quotes will be created.
+  "maxBacking": Maxximum backing for a quote. The market maker will never create a quote with more backing than this setting. Useful if you want multiple quotes to be managed independently on an order book.
+  }
+```
+
 ## Operation
 
 ### Prerequisites
 
-1. Make sure redis-server is installed
-2. Node.js is required as well
-3. "yarn install" in the home directory
+1. Make sure redis server is installed
 
-You must also have a running Microtick node and an API server running. The API server requires "mtcli rest-server" to be running in order to create
-transaction JSON. (Post-Stargate, this last requirement is no longer necessary).
+```
+$ sudo apt-get install redis-server
+```
+
+2. Install node.js (using nvm or the instructions at https://nodejs.org
+3. Install yarn
+
+```
+$ npm install -g yarn
+```
+
+4. Install dependencies
+
+```
+$ git clone https://github.com/microtick/marketmaker
+$ cd marketmaker
+$ yarn install
+```
+
+5. Edit config with the settings you want.
+
+```
+$ cp config-example.json config.json
+```
 
 ### Running
 
-1. Start the price feeds. As separate processes, run:
+1. You must have a synced Microtick node and an API server running. The mtm node should have the API enabled in .microtick/config/app.toml.
+
+To run the Microtick API server:
+
+```
+$ git clone https://github.com/microtick/mtapi
+$ cd mtapi/server
+$ cp config-example.json config.json
+<edit config.json, change use_database to "false">
+$ node server
+```
+
+1. Start the price feed. As a separate process, run:
 
 ```
 $ node kraken
-$ node coincap
 ```
 
-2. Start the pricing module:
+2. As a separate process, start the pricing module:
 
 ```
 $ node pricer
 ```
 
-3. Start the market maker:
+3. Finally, start the market maker as a third process. It will prompt to create a hot wallet and print a microtick address you will need
+to fund. Once you send backing to the address, the market maker will sense it and start managing your quotes according to the settings
+you have in your config.json.
 
 ```
 $ node marketmaker
