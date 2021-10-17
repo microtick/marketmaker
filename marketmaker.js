@@ -258,14 +258,13 @@ class MarketMaker extends DataFeedConsumer {
                     }
                     
                     // Update if premium in either direction drops below target
-                    const thresholdPremium = this.state.markets[market].targetPremiums[dur] * config.premiumThreshold
+                    const thresholdPremium = quotePremium * config.premiumThreshold
                     const minPremium = Math.min(quote.callAsk, quote.putAsk)
-                    //logger.info(dur + " " + thresholdPremium + " " + minPremium)
+                    //logger.info(quote.id + " " + dur + " " + quotePremium + " : " + minPremium + " " + thresholdPremium)
                     if (minPremium < thresholdPremium) {
                         if (!pending) {
                             logger.info("Updating quote (premium): " + quote.id + " " + quote.market + " " + quote.duration + " " + quote.backing + "backing " + newSpot + " " + 
-                                "[" + new BN(this.state.markets[market].targetPremiums[dur]).toFixed(6) + " * " + config.staticMarkup + " * " + 
-                                new BN(dynamicMarkup).toFixed(2) + " + " + new BN(deltaAdjustment).toFixed(6) + " = " + newPremium + "]")
+                                newPremium + " [" + new BN(minPremium) + " < " + new BN(thresholdPremium).toFixed(6) + " ]")
                             this.api.updateQuote(quote.id, newSpot, newPremium, "0premium")
                             pending = true
                         }
