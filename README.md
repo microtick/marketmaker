@@ -116,7 +116,7 @@ multiple quotes will be managed on the market.
 $ sudo apt-get install redis-server
 ```
 
-2. Install node.js (using nvm or the instructions at https://nodejs.org
+2. Install node.js (using [nvm](https://github.com/nvm-sh/nvm) or the instructions at https://nodejs.org
 3. Install yarn
 
 ```
@@ -146,8 +146,10 @@ To run the Microtick API server:
 ```
 $ git clone https://github.com/microtick/mtapi
 $ cd mtapi/server
-$ cp config-example.json config.json
-<edit config.json, change use_database to "false">
+$ mkdir -p ~/.config/microtick
+$ cp config-example.json ~/.config/microtick/mtapi.config
+<edit ~/.config/microtick/mtapi.config, change use_database to "false">
+$ tar xvf proto.tar.gz -C ~/.config/microtick
 $ node server
 ```
 
