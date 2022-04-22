@@ -3,25 +3,24 @@
   "chain": {
     "blocktime": 6000,
     "markets": [
-      "ETHUSD", "XBTUSD", "ATOMUSD"
+      "XBTUSD"
     ],
     "durations": {
       "5minute": 300,
       "15minute": 900,
-      "1hour": 3600,
-      "4hour": 14400,
-      "12hour": 43200
+      "1hour": 3600
     }
   },
-  "minBalance": 1000,
+  "minBalance": 10,
   "staticMarkup": 1.5,
   "dynamicMarkup": 0.5,
   "premiumThreshold": 1.0,
   "staleFraction": 0.5,
   "targetBacking": {
-    "300": 200,
-    "900": 250
+    "300": 1,
+    "900": 1,
+    "3600": 1
   },
-  "minBacking": 25,
-  "maxBacking": 40 
+  "minBacking": 0.1,
+  "maxBacking": 5 
 }
