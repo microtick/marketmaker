@@ -108,6 +108,4 @@ class OptionPricer extends DataFeedConsumer {
 }
 
 const pricer = new OptionPricer()
-pricer.addMarket("ETHUSD")
 pricer.addMarket("XBTUSD")
-pricer.addMarket("ATOMUSD")

@@ -225,7 +225,7 @@ class MarketMaker extends DataFeedConsumer {
                 }
                 */
             
-                if (this.state.markets[market].targetSpot !== undefined && this.state.markets[market].targetPremiums !== undefined) {
+                if (this.state.markets[market] !== undefined && this.state.markets[market].targetSpot !== undefined && this.state.markets[market].targetPremiums !== undefined) {
                         
                     let spotAdjustment = this.state.markets[market].targetSpot
                     let deltaAdjustment = 0

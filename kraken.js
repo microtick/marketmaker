@@ -3,11 +3,10 @@ import { DataFeedProducer } from './DataFeed.js'
 
 const kraken = "https://api.kraken.com/0/public"
 const symbols = {
-    XBTUSD: "XXBTZUSD",
-    ETHUSD: "XETHZUSD"
+    XBTUSD: "XXBTZUSD"
 }
 const ratios = {
-    XBTETH: [ "XBTUSD", "ETHUSD"]
+    //XBTETH: [ "XBTUSD", "ETHUSD"]
 }
 const sampleTime = 10
 
