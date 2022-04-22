@@ -141,17 +141,7 @@ $ cp config-example.json config.json
 
 1. You must have a synced Microtick node and an API server running. The mtm node should have the API enabled in .microtick/config/app.toml.
 
-To run the Microtick API server:
-
-```
-$ git clone https://github.com/microtick/mtapi
-$ cd mtapi/server
-$ mkdir -p ~/.config/microtick
-$ cp config-example.json ~/.config/microtick/mtapi.config
-<edit ~/.config/microtick/mtapi.config, change use_database to "false">
-$ tar xvf proto.tar.gz -C ~/.config/microtick
-$ node server
-```
+To run the Microtick API server use the instructions in the README for the microtick/mtapi repository.
 
 1. Start the price feed. As a separate process, run:
 
