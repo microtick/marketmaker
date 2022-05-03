@@ -3,7 +3,7 @@
   "dependencies": {
     "axios": "^0.21.1",
     "bignumber.js": "^9.0.1",
-    "microtick": "^2.0.3",
+    "microtick": "^2.1.0",
     "prompt": "^1.1.0",
     "redis": "^3.0.2",
     "sjcl": "^1.0.8",
