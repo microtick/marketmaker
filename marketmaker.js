@@ -62,6 +62,7 @@ class MarketMaker extends DataFeedConsumer {
         this.logging = false
         this.api = new microtick()
         this.api.setUrl(config.api)
+        this.api.setDenom(config.denom)
         this.state = {
             funded: false,
             markets: {}

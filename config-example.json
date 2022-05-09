@@ -1,5 +1,6 @@
 {
   "api": "http://localhost:1320",
+  "denom": "stake",
   "chain": {
     "blocktime": 6000,
     "markets": [
